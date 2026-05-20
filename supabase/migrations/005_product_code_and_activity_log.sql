@@ -46,6 +46,9 @@ CREATE INDEX IF NOT EXISTS idx_dashboard_activity_entity
 
 ALTER TABLE public.dashboard_activity_log ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Authenticated can read dashboard activity" ON public.dashboard_activity_log;
+DROP POLICY IF EXISTS "Authenticated can create dashboard activity" ON public.dashboard_activity_log;
+
 CREATE POLICY "Authenticated can read dashboard activity"
   ON public.dashboard_activity_log FOR SELECT TO authenticated USING (true);
 

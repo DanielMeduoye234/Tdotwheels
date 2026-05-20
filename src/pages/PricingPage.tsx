@@ -17,6 +17,7 @@ export function PricingPage() {
   const [search, setSearch] = useState('')
   const [selectedChannel, setSelectedChannel] = useState<string>('all')
   const [addDialogOpen, setAddDialogOpen] = useState(false)
+  const [addChannelDialogOpen, setAddChannelDialogOpen] = useState(false)
   const queryClient = useQueryClient()
 
   const { data: channels } = useQuery({
@@ -77,6 +78,30 @@ export function PricingPage() {
     onError: (error) => toast.error(error.message),
   })
 
+  const addChannel = useMutation({
+    mutationFn: async ({ name, commissionPercent }: { name: string; commissionPercent: number }) => {
+      const { data, error } = await supabase
+        .from('sales_channels')
+        .insert({
+          name: name.trim(),
+          commission_percent: commissionPercent,
+          status: 'active',
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+      return data
+    },
+    onSuccess: (channel) => {
+      queryClient.invalidateQueries({ queryKey: ['sales-channels'] })
+      setAddChannelDialogOpen(false)
+      setSelectedChannel(channel.id)
+      toast.success('Channel added successfully')
+    },
+    onError: (error) => toast.error(error.message),
+  })
+
   function getActivePrice(item: any): number | null {
     if (item.promo_price != null && item.promo_price > 0) return item.promo_price
     if (item.offer_price != null && item.offer_price > 0) return item.offer_price
@@ -91,26 +116,45 @@ export function PricingPage() {
           <h1 className="text-3xl font-bold tracking-tight">Channel Pricing</h1>
           <p className="text-muted-foreground">Manage pricing across sales channels</p>
         </div>
-        <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-          <DialogTrigger asChild>
-            <Button size="sm">
-              <Plus className="h-4 w-4 mr-1" /> Add Pricing
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Add Channel Pricing</DialogTitle>
-            </DialogHeader>
-            <AddPricingForm
-              products={products ?? []}
-              channels={channels ?? []}
-              onSuccess={() => {
-                setAddDialogOpen(false)
-                queryClient.invalidateQueries({ queryKey: ['channel-pricing'] })
-              }}
-            />
-          </DialogContent>
-        </Dialog>
+        <div className="flex items-center gap-2">
+          <Dialog open={addChannelDialogOpen} onOpenChange={setAddChannelDialogOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" variant="outline">
+                <Plus className="h-4 w-4 mr-1" /> Add Channel
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add Sales Channel</DialogTitle>
+              </DialogHeader>
+              <AddChannelForm
+                isLoading={addChannel.isPending}
+                onSubmit={({ name, commissionPercent }) => addChannel.mutate({ name, commissionPercent })}
+              />
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm">
+                <Plus className="h-4 w-4 mr-1" /> Add Pricing
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add Channel Pricing</DialogTitle>
+              </DialogHeader>
+              <AddPricingForm
+                products={products ?? []}
+                channels={channels ?? []}
+                onSuccess={() => {
+                  setAddDialogOpen(false)
+                  queryClient.invalidateQueries({ queryKey: ['channel-pricing'] })
+                }}
+              />
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
@@ -235,6 +279,45 @@ export function PricingPage() {
           </CardContent>
         </Card>
       )}
+    </div>
+  )
+}
+
+function AddChannelForm({
+  isLoading,
+  onSubmit,
+}: {
+  isLoading: boolean
+  onSubmit: (values: { name: string; commissionPercent: number }) => void
+}) {
+  const [name, setName] = useState('')
+  const [commissionPercent, setCommissionPercent] = useState('15')
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label>Channel Name</Label>
+        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Costco" />
+      </div>
+      <div className="space-y-2">
+        <Label>Commission %</Label>
+        <Input
+          type="number"
+          step="0.1"
+          min="0"
+          max="100"
+          value={commissionPercent}
+          onChange={(e) => setCommissionPercent(e.target.value)}
+          onFocus={(e) => e.target.select()}
+        />
+      </div>
+      <Button
+        className="w-full"
+        disabled={isLoading || !name.trim()}
+        onClick={() => onSubmit({ name: name.trim(), commissionPercent: Number(commissionPercent) || 0 })}
+      >
+        {isLoading ? 'Adding...' : 'Add Channel'}
+      </Button>
     </div>
   )
 }

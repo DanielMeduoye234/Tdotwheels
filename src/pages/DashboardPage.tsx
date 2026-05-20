@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
@@ -29,6 +30,7 @@ import {
   TrendingDown,
   AlertTriangle,
   ArrowRight,
+  GripVertical,
   Plus,
   Clock,
   DollarSign,
@@ -49,7 +51,38 @@ const CHART_COLORS = [
   'hsl(0, 0%, 85%)',     // pale gray
 ]
 
+const DASHBOARD_STATS_ORDER_KEY = 'tdw.dashboard.stats-order.v1'
+
 export function DashboardPage() {
+  const [statOrder, setStatOrder] = useState<string[]>([
+    'products',
+    'inventory',
+    'purchases',
+    'suppliers',
+    'channels',
+    'warehouses',
+  ])
+  const [draggingStatKey, setDraggingStatKey] = useState<string | null>(null)
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(DASHBOARD_STATS_ORDER_KEY)
+      if (!saved) return
+      const parsed = JSON.parse(saved)
+      if (!Array.isArray(parsed)) return
+      const sanitized = parsed.filter((k): k is string => typeof k === 'string')
+      if (sanitized.length) {
+        setStatOrder(sanitized)
+      }
+    } catch {
+      // ignore invalid local storage payload
+    }
+  }, [])
+
+  useEffect(() => {
+    localStorage.setItem(DASHBOARD_STATS_ORDER_KEY, JSON.stringify(statOrder))
+  }, [statOrder])
+
   // ── Stats Queries ──
   const { data: productCount } = useQuery({
     queryKey: ['dashboard-products-count'],
@@ -313,13 +346,35 @@ export function DashboardPage() {
   })
 
   const stats = [
-    { name: 'Active Products', value: productCount ?? 0, icon: Package, href: '/products', color: 'from-blue-500 to-blue-600', bg: 'bg-blue-500/10' },
-    { name: 'Total Inventory', value: inventoryTotal ?? 0, icon: BoxIcon, href: '/inventory', color: 'from-emerald-500 to-emerald-600', bg: 'bg-emerald-500/10' },
-    { name: 'Total Purchases', value: purchaseStats?.total ?? 0, icon: ShoppingCart, href: '/purchases', color: 'from-violet-500 to-violet-600', bg: 'bg-violet-500/10' },
-    { name: 'Active Suppliers', value: supplierCount ?? 0, icon: Truck, href: '/suppliers', color: 'from-amber-500 to-amber-600', bg: 'bg-amber-500/10' },
-    { name: 'Sales Channels', value: channelCount ?? 0, icon: BarChart3, href: '/pricing', color: 'from-rose-500 to-rose-600', bg: 'bg-rose-500/10' },
-    { name: 'Warehouses', value: warehouseCount ?? 0, icon: Warehouse, href: '/settings', color: 'from-cyan-500 to-cyan-600', bg: 'bg-cyan-500/10' },
+    { key: 'products', name: 'Active Products', value: productCount ?? 0, icon: Package, href: '/products', color: 'from-blue-500 to-blue-600', bg: 'bg-blue-500/10' },
+    { key: 'inventory', name: 'Total Inventory', value: inventoryTotal ?? 0, icon: BoxIcon, href: '/inventory', color: 'from-emerald-500 to-emerald-600', bg: 'bg-emerald-500/10' },
+    { key: 'purchases', name: 'Total Purchases', value: purchaseStats?.total ?? 0, icon: ShoppingCart, href: '/purchases', color: 'from-violet-500 to-violet-600', bg: 'bg-violet-500/10' },
+    { key: 'suppliers', name: 'Active Suppliers', value: supplierCount ?? 0, icon: Truck, href: '/suppliers', color: 'from-amber-500 to-amber-600', bg: 'bg-amber-500/10' },
+    { key: 'channels', name: 'Sales Channels', value: channelCount ?? 0, icon: BarChart3, href: '/pricing', color: 'from-rose-500 to-rose-600', bg: 'bg-rose-500/10' },
+    { key: 'warehouses', name: 'Warehouses', value: warehouseCount ?? 0, icon: Warehouse, href: '/settings', color: 'from-cyan-500 to-cyan-600', bg: 'bg-cyan-500/10' },
   ]
+
+  const orderedStats = [...stats].sort((a, b) => {
+    const aIndex = statOrder.indexOf(a.key)
+    const bIndex = statOrder.indexOf(b.key)
+    const safeA = aIndex === -1 ? Number.MAX_SAFE_INTEGER : aIndex
+    const safeB = bIndex === -1 ? Number.MAX_SAFE_INTEGER : bIndex
+    return safeA - safeB
+  })
+
+  function reorderStatCard(fromKey: string, toKey: string) {
+    setStatOrder((prev) => {
+      const current = [...prev]
+      const fromIdx = current.indexOf(fromKey)
+      const toIdx = current.indexOf(toKey)
+      if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return prev
+
+      const moved = current.splice(fromIdx, 1)[0]
+      if (!moved) return prev
+      current.splice(toIdx, 0, moved)
+      return current
+    })
+  }
 
   const movementTypeLabels: Record<string, { label: string; icon: typeof TrendingUp; color: string }> = {
     purchase_allocation: { label: 'Purchase', icon: ShoppingCart, color: 'text-blue-600' },
@@ -360,23 +415,51 @@ export function DashboardPage() {
 
       {/* Stats Grid */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        {stats.map((stat, i) => (
-          <Link key={stat.name} to={stat.href}>
-            <Card className="group relative overflow-hidden hover:shadow-elevated hover:-translate-y-0.5 transition-all duration-300 cursor-pointer border-transparent" style={{ animationDelay: `${i * 50}ms` }}>
-              <CardContent className="p-5">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{stat.name}</p>
-                    <p className="text-2xl font-bold mt-2 tabular-nums">{stat.value.toLocaleString()}</p>
+        {orderedStats.map((stat, i) => (
+          <div
+            key={stat.key}
+            draggable
+            onDragStart={(e) => {
+              setDraggingStatKey(stat.key)
+              e.dataTransfer.effectAllowed = 'move'
+              e.dataTransfer.setData('text/plain', stat.key)
+            }}
+            onDragOver={(e) => {
+              e.preventDefault()
+              e.dataTransfer.dropEffect = 'move'
+            }}
+            onDrop={(e) => {
+              e.preventDefault()
+              const fromKey = draggingStatKey ?? e.dataTransfer.getData('text/plain')
+              if (fromKey && fromKey !== stat.key) {
+                reorderStatCard(fromKey, stat.key)
+              }
+              setDraggingStatKey(null)
+            }}
+            onDragEnd={() => setDraggingStatKey(null)}
+            className={draggingStatKey === stat.key ? 'opacity-50' : ''}
+          >
+            <Link to={stat.href}>
+              <Card className="group relative overflow-hidden hover:shadow-elevated hover:-translate-y-0.5 transition-all duration-300 cursor-pointer border-transparent" style={{ animationDelay: `${i * 50}ms` }}>
+                <CardContent className="p-5">
+                  <div className="absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity bg-background/70">
+                    <GripVertical className="h-3.5 w-3.5" />
+                    Drag
                   </div>
-                  <div className={`rounded-xl p-2.5 ${stat.bg}`}>
-                    <stat.icon className={`h-4 w-4 bg-gradient-to-br ${stat.color} bg-clip-text text-transparent`} style={{ color: `var(--tw-gradient-from)` }} />
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{stat.name}</p>
+                      <p className="text-2xl font-bold mt-2 tabular-nums">{stat.value.toLocaleString()}</p>
+                    </div>
+                    <div className={`rounded-xl p-2.5 ${stat.bg}`}>
+                      <stat.icon className={`h-4 w-4 bg-gradient-to-br ${stat.color} bg-clip-text text-transparent`} style={{ color: `var(--tw-gradient-from)` }} />
+                    </div>
                   </div>
-                </div>
-                <div className={`absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r ${stat.color} opacity-0 group-hover:opacity-100 transition-opacity`} />
-              </CardContent>
-            </Card>
-          </Link>
+                  <div className={`absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r ${stat.color} opacity-0 group-hover:opacity-100 transition-opacity`} />
+                </CardContent>
+              </Card>
+            </Link>
+          </div>
         ))}
       </div>
 
