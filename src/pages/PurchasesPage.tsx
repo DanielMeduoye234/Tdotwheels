@@ -343,28 +343,38 @@ export function PurchasesPage() {
 
   function downloadTemplate() {
     const templateData = [{
-      invoice_number: 'INV-001',
-      supplier_name: 'Supplier A',
+      invoice_number: 'INV-2026-001',
+      supplier_name: 'Global Electronics Supplier',
       invoice_date: '05/15/2026',
       product_id: 'PRD-1001',
-      quantity: '100',
-      unit_cost: '25.50',
+      quantity: '500',
+      unit_cost: '12.50',
       tax_percent: '10',
       tax_recoverability: 'recoverable',
-      notes: 'Sample purchase',
+      notes: 'Wholesale order, includes shipping',
+    }, {
+      invoice_number: 'INV-2026-002',
+      supplier_name: 'Premium Parts Inc',
+      invoice_date: '05/16/2026',
+      product_id: 'PRD-1005',
+      quantity: '250',
+      unit_cost: '45.75',
+      tax_percent: '8',
+      tax_recoverability: 'recoverable',
+      notes: 'Standard order',
     }]
     exportToCSV(templateData, 'purchases-template', [
-      { key: 'invoice_number', header: 'Invoice Number' },
-      { key: 'supplier_name', header: 'Supplier Name' },
-      { key: 'invoice_date', header: 'Invoice Date' },
-      { key: 'product_id', header: 'Product ID' },
-      { key: 'quantity', header: 'Quantity' },
-      { key: 'unit_cost', header: 'Unit Cost' },
-      { key: 'tax_percent', header: 'Tax %' },
-      { key: 'tax_recoverability', header: 'Tax Recoverability' },
+      { key: 'invoice_number', header: 'Invoice Number *' },
+      { key: 'supplier_name', header: 'Supplier Name (must exist) *' },
+      { key: 'invoice_date', header: 'Invoice Date (MM/DD/YYYY) *' },
+      { key: 'product_id', header: 'Product ID / SKU / Code *' },
+      { key: 'quantity', header: 'Quantity *' },
+      { key: 'unit_cost', header: 'Unit Cost *' },
+      { key: 'tax_percent', header: 'Tax Percentage (%)' },
+      { key: 'tax_recoverability', header: 'Tax Type (recoverable/non_recoverable)' },
       { key: 'notes', header: 'Notes' },
     ])
-    toast.success('Template downloaded - fill it out and upload to import purchases')
+    toast.success('Purchases template downloaded')
   }
 
   function openEditDialog(purchase: any) {

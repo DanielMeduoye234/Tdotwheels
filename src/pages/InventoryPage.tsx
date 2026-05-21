@@ -36,7 +36,21 @@ export function InventoryPage() {
     queryFn: async () => {
       let query = supabase
         .from('inventory')
-        .select('*, product:products(id, name, sku), warehouse_location:warehouse_locations(id, name)')
+        .select(`
+          *,
+          product:products(id, name, sku),
+          warehouse_location:warehouse_locations(id, name),
+          allocations:purchase_allocations(
+            id,
+            quantity,
+            purchase_line_item:purchase_line_items(
+              tax_amount,
+              tax_percent,
+              tax_recoverability,
+              unit_cost
+            )
+          )
+        `)
 
       if (warehouseFilter !== 'all') {
         query = query.eq('warehouse_location_id', warehouseFilter)
@@ -94,17 +108,31 @@ export function InventoryPage() {
         product: inv.product,
         total: 0,
         locations: [],
+        totalTax: 0,
       }
     }
     acc[productId].total += inv.quantity
+    const invTax = calculateInventoryTax(inv)
+    acc[productId].totalTax += invTax
     if (inv.quantity > 0) {
       acc[productId].locations.push({
         location: inv.warehouse_location,
         quantity: inv.quantity,
+        tax: invTax,
       })
     }
     return acc
   }, {})
+
+  function calculateInventoryTax(inv: any): number {
+    if (!inv.allocations || inv.allocations.length === 0) return 0
+    return inv.allocations.reduce((sum: number, alloc: any) => {
+      if (alloc.purchase_line_item?.tax_amount) {
+        return sum + parseFloat(String(alloc.purchase_line_item.tax_amount))
+      }
+      return sum
+    }, 0)
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -121,11 +149,13 @@ export function InventoryPage() {
               sku: inv.product?.sku ?? '',
               warehouse: inv.warehouse_location?.name ?? '',
               quantity: inv.quantity,
+              tax_paid: calculateInventoryTax(inv),
             })), 'inventory', [
               { key: 'product_name', header: 'Product' },
               { key: 'sku', header: 'SKU' },
               { key: 'warehouse', header: 'Warehouse' },
               { key: 'quantity', header: 'Quantity' },
+              { key: 'tax_paid', header: 'Tax Paid' },
             ])
             toast.success('Inventory exported')
           }} disabled={!inventory?.length}>
@@ -216,6 +246,7 @@ export function InventoryPage() {
                     <TableHead>SKU</TableHead>
                     <TableHead className="text-right">Total Qty</TableHead>
                     <TableHead>Locations</TableHead>
+                    <TableHead className="text-right">Tax Paid</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -234,6 +265,7 @@ export function InventoryPage() {
                         <TableCell className="text-sm text-muted-foreground">
                           {item.locations.map((l: any) => `${l.location.name} (${l.quantity})`).join(', ')}
                         </TableCell>
+                        <TableCell className="text-right font-mono text-sm">${item.totalTax.toFixed(2)}</TableCell>
                       </TableRow>
                     ))
                   )}
@@ -254,6 +286,7 @@ export function InventoryPage() {
                     <TableHead>ID</TableHead>
                     <TableHead>Location</TableHead>
                     <TableHead className="text-right">Quantity</TableHead>
+                    <TableHead className="text-right">Tax Paid</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -273,6 +306,7 @@ export function InventoryPage() {
                         <TableCell className="font-medium">{inv.product?.name}</TableCell>
                         <TableCell className="font-mono text-sm">{inv.product?.sku}</TableCell>                        <TableCell className="font-mono text-xs">{inv.product?.product_code ?? inv.product?.id.slice(0, 8)}</TableCell>                        <TableCell>{inv.warehouse_location?.name}</TableCell>
                         <TableCell className="text-right font-mono">{inv.quantity}</TableCell>
+                        <TableCell className="text-right font-mono text-sm">${calculateInventoryTax(inv).toFixed(2)}</TableCell>
                       </TableRow>
                     ))
                   )}
@@ -743,20 +777,22 @@ function BulkInventoryUpdateForm({ onSuccess }: { onSuccess: () => void }) {
   const { user } = useAuth()
 
   const downloadTemplate = async () => {
-    const { data: products } = await supabase.from('products').select('id, sku, product_code').eq('status', 'active')
+    const { data: products } = await supabase.from('products').select('id, sku, product_code, name').eq('status', 'active')
     
-    const templateData = (products ?? []).map((p) => ({
+    const templateData = (products ?? []).slice(0, 5).map((p) => ({
       product_id: p.product_code ?? p.sku,
-      warehouse_name: '',
-      quantity: 0,
+      product_name: p.name,
+      warehouse_name: 'WFS CA',
+      quantity: '100',
     }))
 
     exportToCSV(templateData, 'inventory-template', [
-      { key: 'product_id', header: 'Product ID (or SKU)' },
-      { key: 'warehouse_name', header: 'Warehouse Name' },
-      { key: 'quantity', header: 'Quantity' },
+      { key: 'product_id', header: 'Product ID (Product Code or SKU) *' },
+      { key: 'product_name', header: 'Product Name (reference only)' },
+      { key: 'warehouse_name', header: 'Warehouse Name (exact match) *' },
+      { key: 'quantity', header: 'Quantity (update quantity for warehouse) *' },
     ])
-    toast.success('Template downloaded')
+    toast.success('Inventory template downloaded')
   }
 
   const bulkUpdate = useMutation({

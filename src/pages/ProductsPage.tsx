@@ -125,34 +125,47 @@ export function ProductsPage() {
 
   function downloadTemplate() {
     const templateData = [{
-      name: 'Example Product',
-      sku: 'SKU-001',
+      name: 'Wireless Headphones',
+      sku: 'WH-BT-500',
       status: 'active',
-      brand: 'Brand Name',
+      brand: 'AudioTech',
       upc_gtin: '1234567890123',
-      weight: '1.5',
+      weight: '0.25',
       weight_unit: 'kg',
-      length: '10',
-      width: '5',
-      height: '3',
+      length: '20',
+      width: '18',
+      height: '8',
       dimension_unit: 'cm',
-      image_url: 'https://example.com/image.jpg',
+      image_url: 'https://example.com/wireless-headphones.jpg',
+    }, {
+      name: 'USB-C Cable',
+      sku: 'USBC-2M',
+      status: 'active',
+      brand: 'CableMax',
+      upc_gtin: '9876543210987',
+      weight: '0.05',
+      weight_unit: 'kg',
+      length: '5',
+      width: '3',
+      height: '2',
+      dimension_unit: 'cm',
+      image_url: 'https://example.com/usb-cable.jpg',
     }]
     exportToCSV(templateData, 'products-template', [
-      { key: 'name', header: 'Name' },
-      { key: 'sku', header: 'SKU' },
-      { key: 'status', header: 'Status' },
+      { key: 'name', header: 'Product Name *' },
+      { key: 'sku', header: 'SKU (Unique ID) *' },
+      { key: 'status', header: 'Status (active/inactive) *' },
       { key: 'brand', header: 'Brand' },
       { key: 'upc_gtin', header: 'UPC/GTIN' },
       { key: 'weight', header: 'Weight' },
-      { key: 'weight_unit', header: 'Weight Unit' },
+      { key: 'weight_unit', header: 'Unit (kg/lb/oz/g)' },
       { key: 'length', header: 'Length' },
       { key: 'width', header: 'Width' },
       { key: 'height', header: 'Height' },
-      { key: 'dimension_unit', header: 'Dimension Unit' },
+      { key: 'dimension_unit', header: 'Dimension Unit (cm/in/mm)' },
       { key: 'image_url', header: 'Image URL' },
     ])
-    toast.success('Template downloaded')
+    toast.success('Products template downloaded')
   }
 
   const updateProduct = useMutation({
