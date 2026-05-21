@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { Plus, Search, Download, Pencil, Trash2 } from 'lucide-react'
+import { Plus, Search, Download, Upload, Pencil, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from '@/contexts/AuthContext'
-import { exportToCSV } from '@/lib/csv'
+import { exportToCSV, parseCSV } from '@/lib/csv'
 import { toast } from 'sonner'
 import { logDashboardActivity } from '@/lib/audit'
 
@@ -25,6 +25,8 @@ export function PurchasesPage() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [selectedPurchase, setSelectedPurchase] = useState<any | null>(null)
+  const [importing, setImporting] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const queryClient = useQueryClient()
   const { user } = useAuth()
 
@@ -183,6 +185,188 @@ export function PurchasesPage() {
     onError: (error) => toast.error(error.message),
   })
 
+  const bulkImportPurchases = useMutation({
+    mutationFn: async (csvText: string) => {
+      const rows = parseCSV(csvText)
+      if (rows.length === 0) {
+        throw new Error('No valid rows in CSV')
+      }
+
+      // Build lookup maps for suppliers and products
+      const { data: supplierData } = await supabase.from('suppliers').select('id, name')
+      const supplierByName = new Map(supplierData?.map((s: any) => [s.name.toLowerCase(), s.id]) ?? [])
+
+      const { data: productData } = await supabase.from('products').select('id, sku, product_code')
+      const productBySku = new Map(productData?.map((p: any) => [p.sku.toLowerCase(), p.id]) ?? [])
+      const productByCode = new Map(productData?.map((p: any) => [p.product_code?.toLowerCase(), p.id]) ?? [])
+
+      const createdPurchases: any[] = []
+      let successCount = 0
+      let errorCount = 0
+      const errors: string[] = []
+
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i]
+        if (!row) continue
+        try {
+          const invoiceNumber = row.invoice_number?.trim()
+          const supplierName = row.supplier_name?.trim()
+          const invoiceDate = row.invoice_date?.trim()
+          const productId = row.product_id?.trim()
+          const quantity = parseInt(row.quantity ?? '0', 10)
+          const unitCost = parseFloat(row.unit_cost ?? '0')
+          const taxPercent = parseFloat(row.tax_percent ?? '0')
+          const taxRecoverability = row.tax_recoverability?.trim() ?? 'recoverable'
+          const notes = row.notes?.trim() ?? null
+
+          // Validate required fields
+          if (!invoiceNumber) throw new Error('Missing invoice_number')
+          if (!supplierName) throw new Error('Missing supplier_name')
+          if (!invoiceDate) throw new Error('Missing invoice_date')
+          if (!productId) throw new Error('Missing product_id (product code, SKU, or ID)')
+          if (!quantity || quantity <= 0) throw new Error('Invalid quantity')
+          if (!unitCost || unitCost < 0) throw new Error('Invalid unit_cost')
+
+          // Lookup supplier
+          const supplierId = supplierByName.get(supplierName.toLowerCase())
+          if (!supplierId) throw new Error(`Supplier "${supplierName}" not found`)
+
+          // Lookup product by product_code, SKU, or ID
+          let matchedProductId = productByCode.get(productId.toLowerCase()) || 
+                                  productBySku.get(productId.toLowerCase()) ||
+                                  (productData?.find((p: any) => p.id === productId)?.id)
+          if (!matchedProductId) throw new Error(`Product "${productId}" not found - use product_code, SKU, or ID`)
+
+          // Create purchase invoice
+          const { data: purchase, error: purchaseError } = await supabase
+            .from('purchases')
+            .insert({
+              invoice_number: invoiceNumber,
+              supplier_id: supplierId,
+              invoice_date: invoiceDate,
+              notes: notes,
+              status: 'draft',
+              created_by: user!.id,
+            })
+            .select()
+            .single()
+
+          if (purchaseError) throw purchaseError
+
+          // Calculate tax amount
+          const taxAmount = ((quantity * unitCost * taxPercent) / 100).toFixed(2)
+
+          // Create purchase line item
+          const { error: lineItemError } = await supabase
+            .from('purchase_line_items')
+            .insert({
+              purchase_id: purchase.id,
+              product_id: matchedProductId,
+              quantity: quantity,
+              unit_cost: unitCost,
+              tax_percent: taxPercent,
+              tax_amount: parseFloat(taxAmount),
+              tax_recoverability: taxRecoverability,
+            })
+
+          if (lineItemError) throw lineItemError
+
+          createdPurchases.push(purchase)
+          successCount++
+
+          // Log activity
+          if (user) {
+            await logDashboardActivity({
+              entityType: 'purchase',
+              action: 'create',
+              userId: user.id,
+              entityId: purchase.id,
+              description: `Bulk imported purchase invoice ${invoiceNumber}`,
+              metadata: { supplier_id: supplierId, product_id: matchedProductId },
+            })
+          }
+        } catch (err: any) {
+          errorCount++
+          errors.push(`Row ${i + 2}: ${err.message}`)
+        }
+      }
+
+      if (successCount === 0) {
+        throw new Error(`Failed to import any purchases:\n${errors.join('\n')}`)
+      }
+
+      return { successCount, errorCount, errors, createdPurchases }
+    },
+    onSuccess: async (result) => {
+      queryClient.invalidateQueries({ queryKey: ['purchases'] })
+      setImporting(false)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+
+      let message = `Successfully imported ${result.successCount} purchase${result.successCount !== 1 ? 's' : ''}`
+      if (result.errorCount > 0) {
+        message += ` (${result.errorCount} failed)`
+      }
+      toast.success(message)
+
+      if (result.errors.length > 0) {
+        toast.error(`Some rows failed:\n${result.errors.slice(0, 3).join('\n')}${result.errors.length > 3 ? `\n... and ${result.errors.length - 3} more` : ''}`)
+      }
+    },
+    onError: (error: any) => {
+      setImporting(false)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+      toast.error(error.message || 'Failed to import purchases')
+    },
+  })
+
+  function handleBulkImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setImporting(true)
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      try {
+        const csv = event.target?.result as string
+        bulkImportPurchases.mutate(csv)
+      } catch (err: any) {
+        setImporting(false)
+        toast.error('Failed to read file')
+      }
+    }
+    reader.readAsText(file)
+  }
+
+  function downloadTemplate() {
+    const templateData = [{
+      invoice_number: 'INV-001',
+      supplier_name: 'Supplier A',
+      invoice_date: '05/15/2026',
+      product_id: 'PRD-1001',
+      quantity: '100',
+      unit_cost: '25.50',
+      tax_percent: '10',
+      tax_recoverability: 'recoverable',
+      notes: 'Sample purchase',
+    }]
+    exportToCSV(templateData, 'purchases-template', [
+      { key: 'invoice_number', header: 'Invoice Number' },
+      { key: 'supplier_name', header: 'Supplier Name' },
+      { key: 'invoice_date', header: 'Invoice Date' },
+      { key: 'product_id', header: 'Product ID' },
+      { key: 'quantity', header: 'Quantity' },
+      { key: 'unit_cost', header: 'Unit Cost' },
+      { key: 'tax_percent', header: 'Tax %' },
+      { key: 'tax_recoverability', header: 'Tax Recoverability' },
+      { key: 'notes', header: 'Notes' },
+    ])
+    toast.success('Template downloaded - fill it out and upload to import purchases')
+  }
+
   function openEditDialog(purchase: any) {
     setSelectedPurchase(purchase)
     setEditInvoiceNumber(purchase.invoice_number)
@@ -218,6 +402,27 @@ export function PurchasesPage() {
             <Download className="h-4 w-4 mr-1" />
             Export
           </Button>
+          <Button variant="outline" size="sm" onClick={downloadTemplate}>
+            <Download className="h-4 w-4 mr-1" />
+            Template
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importing}
+          >
+            <Upload className="h-4 w-4 mr-1" />
+            {importing ? 'Importing...' : 'Import'}
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv"
+            style={{ display: 'none' }}
+            onChange={handleBulkImport}
+            disabled={importing}
+          />
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button>
