@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent } from '@/components/ui/card'
-import { Textarea } from '@/components/ui/textarea'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
@@ -772,9 +771,10 @@ function TransferForm({ onSuccess }: { onSuccess: () => void }) {
 }
 
 function BulkInventoryUpdateForm({ onSuccess }: { onSuccess: () => void }) {
-  const [payload, setPayload] = useState('')
   const queryClient = useQueryClient()
   const { user } = useAuth()
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
 
   const downloadTemplate = async () => {
     const { data: products } = await supabase.from('products').select('id, sku, product_code, name').eq('status', 'active')
@@ -786,23 +786,33 @@ function BulkInventoryUpdateForm({ onSuccess }: { onSuccess: () => void }) {
       quantity: '100',
     }))
 
-    exportToCSV(templateData, 'inventory-template', [
-      { key: 'product_id', header: 'Product ID (Product Code or SKU) *' },
-      { key: 'product_name', header: 'Product Name (reference only)' },
-      { key: 'warehouse_name', header: 'Warehouse Name (exact match) *' },
-      { key: 'quantity', header: 'Quantity (update quantity for warehouse) *' },
+    exportToCSV(templateData, 'inventory-bulk-update', [
+      { key: 'product_id', header: 'Product ID' },
+      { key: 'product_name', header: 'Product Name' },
+      { key: 'warehouse_name', header: 'Warehouse Name' },
+      { key: 'quantity', header: 'Quantity' },
     ])
-    toast.success('Inventory template downloaded')
+    toast.success('Template downloaded - fill it out and upload the CSV')
   }
 
   const bulkUpdate = useMutation({
-    mutationFn: async () => {
-      const lines = payload
-        .split('\n')
-        .map((line) => line.trim())
-        .filter(Boolean)
+    mutationFn: async (file: File) => {
+      if (!file) throw new Error('No file selected')
+      
+      const text = await file.text()
+      const lines = text.split('\n').map((line) => line.trim()).filter(Boolean)
+      
+      if (lines.length < 2) throw new Error('CSV must have header row and at least one data row')
 
-      if (lines.length === 0) throw new Error('Enter at least one row')
+      // Parse header to find column indices
+      const headers = lines[0]!.split(',').map((h) => h.trim().toLowerCase())
+      const productIdIdx = headers.findIndex((h) => h.includes('product') && h.includes('id'))
+      const warehouseIdx = headers.findIndex((h) => h.includes('warehouse'))
+      const quantityIdx = headers.findIndex((h) => h.includes('quantity'))
+
+      if (productIdIdx === -1 || warehouseIdx === -1 || quantityIdx === -1) {
+        throw new Error('CSV must have Product ID, Warehouse Name, and Quantity columns')
+      }
 
       const { data: products, error: productsError } = await supabase
         .from('products')
@@ -819,16 +829,30 @@ function BulkInventoryUpdateForm({ onSuccess }: { onSuccess: () => void }) {
       const locationByName = new Map((locations ?? []).map((l) => [l.name.toLowerCase(), l.id]))
 
       let updated = 0
-      for (const line of lines) {
-        const [rawProductId, rawLocation, rawQty] = line.split(',').map((part) => part?.trim())
-        if (!rawProductId || !rawLocation || !rawQty) continue
+      let skipped = 0
+      
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i]!
+        const cols = line.split(',').map((c) => c.trim())
+        
+        const rawProductId = cols[productIdIdx]?.trim()
+        const rawLocation = cols[warehouseIdx]?.trim()
+        const rawQty = cols[quantityIdx]?.trim()
+
+        if (!rawProductId || !rawLocation || !rawQty) {
+          skipped++
+          continue
+        }
 
         let productId = productByCode.get(rawProductId.toLowerCase())
         if (!productId) productId = productBySku.get(rawProductId.toLowerCase())
         const locationId = locationByName.get(rawLocation.toLowerCase())
         const quantity = Number(rawQty)
 
-        if (!productId || !locationId || !Number.isFinite(quantity) || quantity < 0) continue
+        if (!productId || !locationId || !Number.isFinite(quantity) || quantity < 0) {
+          skipped++
+          continue
+        }
 
         const { data: existing } = await supabase
           .from('inventory')
@@ -840,6 +864,7 @@ function BulkInventoryUpdateForm({ onSuccess }: { onSuccess: () => void }) {
         if (existing) {
           const { error } = await supabase.from('inventory').update({ quantity }).eq('id', existing.id)
           if (!error) updated++
+          else skipped++
           continue
         }
 
@@ -847,22 +872,24 @@ function BulkInventoryUpdateForm({ onSuccess }: { onSuccess: () => void }) {
           .from('inventory')
           .insert({ product_id: productId, warehouse_location_id: locationId, quantity })
         if (!error) updated++
+        else skipped++
       }
 
-      return { updated }
+      return { updated, skipped }
     },
-    onSuccess: async ({ updated }) => {
+    onSuccess: async ({ updated, skipped }) => {
       queryClient.invalidateQueries({ queryKey: ['inventory'] })
       if (user) {
         await logDashboardActivity({
           entityType: 'inventory',
-          action: 'update',
+          action: 'bulk_update',
           userId: user.id,
-          description: `Bulk updated inventory rows: ${updated}`,
-          metadata: { rows_updated: updated },
+          description: `Bulk inventory update: ${updated} rows updated${skipped > 0 ? `, ${skipped} skipped` : ''}`,
+          metadata: { rows_updated: updated, rows_skipped: skipped },
         })
       }
-      toast.success(`Bulk update complete (${updated} row${updated === 1 ? '' : 's'})`)
+      setSelectedFile(null)
+      toast.success(`Bulk update complete - ${updated} row${updated === 1 ? '' : 's'} updated${skipped > 0 ? `, ${skipped} skipped` : ''}`)
       onSuccess()
     },
     onError: (error) => toast.error(error.message),
@@ -871,22 +898,61 @@ function BulkInventoryUpdateForm({ onSuccess }: { onSuccess: () => void }) {
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-sm text-muted-foreground mb-2">
-          Enter one row per line in this format: <span className="font-mono">Product ID (or SKU),Warehouse Name,Quantity</span>
+        <p className="text-sm text-muted-foreground mb-3">
+          Upload a CSV file to bulk update inventory quantities. The CSV should include columns for Product ID (PRD code or SKU), Warehouse Name, and Quantity.
         </p>
-        <Button size="sm" variant="outline" onClick={downloadTemplate} className="mb-3">
+        <Button size="sm" variant="outline" onClick={downloadTemplate} className="mb-4">
           Download Template
         </Button>
       </div>
-      <Textarea
-        value={payload}
-        onChange={(e) => setPayload(e.target.value)}
-        placeholder="PRD-001001,WFS CA,25"
-        className="h-36"
-      />
-      <Button className="w-full" onClick={() => bulkUpdate.mutate()} disabled={bulkUpdate.isPending}>
-        {bulkUpdate.isPending ? 'Updating...' : 'Run Bulk Update'}
-      </Button>
+      
+      <div className="border-2 border-dashed rounded-lg p-6 text-center space-y-2">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".csv"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.currentTarget.files?.[0]
+            if (file) setSelectedFile(file)
+          }}
+        />
+        <p className="text-sm text-muted-foreground">
+          {selectedFile ? (
+            <span className="font-medium text-foreground">{selectedFile.name}</span>
+          ) : (
+            <>
+              <button
+                className="text-primary hover:underline"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                Click to upload
+              </button>
+              {' '}or drag and drop CSV file
+            </>
+          )}
+        </p>
+        {selectedFile && (
+          <div className="flex items-center justify-center gap-2">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setSelectedFile(null)}
+            >
+              Clear
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => {
+                if (selectedFile) bulkUpdate.mutate(selectedFile)
+              }}
+              disabled={bulkUpdate.isPending || !selectedFile}
+            >
+              {bulkUpdate.isPending ? 'Uploading...' : 'Upload & Update'}
+            </Button>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

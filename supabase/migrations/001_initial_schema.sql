@@ -271,11 +271,11 @@ CREATE POLICY "Users can read all users" ON public.users FOR SELECT TO authentic
 CREATE POLICY "Users can insert own profile" ON public.users FOR INSERT TO authenticated WITH CHECK (auth.uid() = id);
 CREATE POLICY "Admins can update users" ON public.users FOR UPDATE TO authenticated USING (public.get_user_role() = 'admin');
 
--- Products: authenticated users can read, create, update
+-- Products: authenticated users can read, create, update, delete
 CREATE POLICY "Authenticated can read products" ON public.products FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Authenticated can create products" ON public.products FOR INSERT TO authenticated WITH CHECK (true);
 CREATE POLICY "Authenticated can update products" ON public.products FOR UPDATE TO authenticated USING (true);
-CREATE POLICY "Admins can delete products" ON public.products FOR DELETE TO authenticated USING (public.get_user_role() = 'admin');
+CREATE POLICY "Authenticated can delete products" ON public.products FOR DELETE TO authenticated USING (true);
 
 -- Warehouse locations: all authenticated read, admins manage
 CREATE POLICY "Authenticated can read locations" ON public.warehouse_locations FOR SELECT TO authenticated USING (true);
@@ -295,11 +295,13 @@ CREATE POLICY "Authenticated can create movements" ON public.inventory_movements
 CREATE POLICY "Authenticated can read suppliers" ON public.suppliers FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Authenticated can create suppliers" ON public.suppliers FOR INSERT TO authenticated WITH CHECK (true);
 CREATE POLICY "Authenticated can update suppliers" ON public.suppliers FOR UPDATE TO authenticated USING (true);
+CREATE POLICY "Authenticated can delete suppliers" ON public.suppliers FOR DELETE TO authenticated USING (true);
 
 -- Purchases: authenticated read and manage
 CREATE POLICY "Authenticated can read purchases" ON public.purchases FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Authenticated can create purchases" ON public.purchases FOR INSERT TO authenticated WITH CHECK (true);
 CREATE POLICY "Authenticated can update purchases" ON public.purchases FOR UPDATE TO authenticated USING (true);
+CREATE POLICY "Authenticated can delete purchases" ON public.purchases FOR DELETE TO authenticated USING (true);
 
 -- Purchase line items
 CREATE POLICY "Authenticated can read line items" ON public.purchase_line_items FOR SELECT TO authenticated USING (true);
@@ -328,6 +330,7 @@ CREATE POLICY "Admins can update channels" ON public.sales_channels FOR UPDATE T
 CREATE POLICY "Authenticated can read pricing" ON public.channel_pricing FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Authenticated can create pricing" ON public.channel_pricing FOR INSERT TO authenticated WITH CHECK (true);
 CREATE POLICY "Authenticated can update pricing" ON public.channel_pricing FOR UPDATE TO authenticated USING (true);
+CREATE POLICY "Authenticated can delete pricing" ON public.channel_pricing FOR DELETE TO authenticated USING (true);
 
 -- =============================================
 -- AUTO-CREATE USER PROFILE ON SIGNUP
