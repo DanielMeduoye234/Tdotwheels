@@ -51,6 +51,8 @@ ALTER TABLE public.shipment_events ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Authenticated can read shipments" ON public.shipment_tracking FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Authenticated can create shipments" ON public.shipment_tracking FOR INSERT TO authenticated WITH CHECK (true);
 CREATE POLICY "Authenticated can update shipments" ON public.shipment_tracking FOR UPDATE TO authenticated USING (true);
+CREATE POLICY "Authenticated can delete shipments" ON public.shipment_tracking FOR DELETE TO authenticated USING (true);
 
 CREATE POLICY "Authenticated can read shipment events" ON public.shipment_events FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Authenticated can create shipment events" ON public.shipment_events FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "Authenticated can delete shipment events" ON public.shipment_events FOR DELETE TO authenticated USING (true);

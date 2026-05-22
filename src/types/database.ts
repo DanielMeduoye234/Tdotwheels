@@ -11,6 +11,7 @@ export type FulfillmentMode = 'seller_fulfilled' | 'marketplace_fulfilled'
 export type PriceType = 'retail' | 'offer' | 'promo'
 export type WeightUnit = 'kg' | 'lb' | 'oz' | 'g'
 export type DimensionUnit = 'cm' | 'in' | 'mm'
+export type ShipmentStatus = 'ordered' | 'shipped' | 'in_transit' | 'customs' | 'delivered' | 'received'
 
 export interface Database {
   public: {
@@ -374,6 +375,74 @@ export interface Database {
           seller_shipping_cost?: number
           marketplace_fulfillment_cost?: number
           updated_at?: string
+        }
+      }
+      shipment_tracking: {
+        Row: {
+          id: string
+          purchase_id: string
+          status: ShipmentStatus
+          carrier: string | null
+          tracking_number: string | null
+          estimated_arrival: string | null
+          actual_arrival: string | null
+          origin_country: string | null
+          destination_country: string
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          purchase_id: string
+          status?: ShipmentStatus
+          carrier?: string | null
+          tracking_number?: string | null
+          estimated_arrival?: string | null
+          actual_arrival?: string | null
+          origin_country?: string | null
+          destination_country?: string
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          status?: ShipmentStatus
+          carrier?: string | null
+          tracking_number?: string | null
+          estimated_arrival?: string | null
+          actual_arrival?: string | null
+          origin_country?: string | null
+          destination_country?: string
+          notes?: string | null
+          updated_at?: string
+        }
+      }
+      shipment_events: {
+        Row: {
+          id: string
+          shipment_id: string
+          status: ShipmentStatus
+          location: string | null
+          notes: string | null
+          event_date: string
+          created_by: string | null
+        }
+        Insert: {
+          id?: string
+          shipment_id: string
+          status: ShipmentStatus
+          location?: string | null
+          notes?: string | null
+          event_date?: string
+          created_by?: string | null
+        }
+        Update: {
+          status?: ShipmentStatus
+          location?: string | null
+          notes?: string | null
+          event_date?: string
+          created_by?: string | null
         }
       }
       dashboard_activity_log: {

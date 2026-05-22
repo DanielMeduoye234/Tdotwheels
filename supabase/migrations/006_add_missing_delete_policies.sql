@@ -15,3 +15,7 @@ CREATE POLICY "Authenticated can delete purchases" ON public.purchases FOR DELET
 
 -- Add DELETE policy for channel_pricing
 CREATE POLICY "Authenticated can delete pricing" ON public.channel_pricing FOR DELETE TO authenticated USING (true);
+
+-- Add DELETE policies for shipment tables
+CREATE POLICY "Authenticated can delete shipments" ON public.shipment_tracking FOR DELETE TO authenticated USING (true);
+CREATE POLICY "Authenticated can delete shipment events" ON public.shipment_events FOR DELETE TO authenticated USING (true);

@@ -47,7 +47,7 @@ export function ProductsPage() {
         .order('created_at', { ascending: false })
 
       if (search) {
-        query = query.or(`name.ilike.%${search}%,sku.ilike.%${search}%`)
+        query = query.or(`name.ilike.%${search}%,sku.ilike.%${search}%,product_code.ilike.%${search}%`)
       }
       if (statusFilter !== 'all') {
         query = query.eq('status', statusFilter)
