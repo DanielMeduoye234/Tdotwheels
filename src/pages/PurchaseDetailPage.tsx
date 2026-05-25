@@ -1182,7 +1182,6 @@ function AddLineItemForm({
                   <thead className="sticky top-0 bg-muted border-b">
                     <tr>
                       <th className="text-left p-2 md:p-3">Product Name</th>
-                      <th className="text-left p-2 md:p-3">SKU</th>
                       <th className="text-left p-2 md:p-3">Product ID</th>
                       <th className="text-left p-2 md:p-3">Action</th>
                     </tr>
@@ -1190,7 +1189,7 @@ function AddLineItemForm({
                   <tbody>
                     {filteredProducts.length === 0 ? (
                       <tr>
-                        <td colSpan={4} className="p-2 md:p-3 text-center text-muted-foreground">
+                        <td colSpan={3} className="p-2 md:p-3 text-center text-muted-foreground">
                           No products found
                         </td>
                       </tr>
@@ -1198,7 +1197,6 @@ function AddLineItemForm({
                       filteredProducts.map((p) => (
                         <tr key={p.id} className="border-b hover:bg-muted/50 transition-colors">
                           <td className="p-2 md:p-3 font-medium max-w-xs truncate">{p.name}</td>
-                          <td className="p-2 md:p-3 font-mono text-xs whitespace-nowrap">{p.sku}</td>
                           <td className="p-2 md:p-3 font-mono text-xs whitespace-nowrap">{p.product_code}</td>
                           <td className="p-2 md:p-3">
                             <Button
