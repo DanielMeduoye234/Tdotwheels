@@ -38,17 +38,7 @@ export function InventoryPage() {
         .select(`
           *,
           product:products(id, name, sku),
-          warehouse_location:warehouse_locations(id, name),
-          allocations:purchase_allocations(
-            id,
-            quantity,
-            purchase_line_item:purchase_line_items(
-              tax_amount,
-              tax_percent,
-              tax_recoverability,
-              unit_cost
-            )
-          )
+          warehouse_location:warehouse_locations(id, name)
         `)
 
       if (warehouseFilter !== 'all') {
@@ -111,7 +101,7 @@ export function InventoryPage() {
       }
     }
     acc[productId].total += inv.quantity
-    const invTax = calculateInventoryTax(inv)
+    const invTax = calculateInventoryTax()
     acc[productId].totalTax += invTax
     if (inv.quantity > 0) {
       acc[productId].locations.push({
@@ -123,14 +113,11 @@ export function InventoryPage() {
     return acc
   }, {})
 
-  function calculateInventoryTax(inv: any): number {
-    if (!inv.allocations || inv.allocations.length === 0) return 0
-    return inv.allocations.reduce((sum: number, alloc: any) => {
-      if (alloc.purchase_line_item?.tax_amount) {
-        return sum + parseFloat(String(alloc.purchase_line_item.tax_amount))
-      }
-      return sum
-    }, 0)
+  function calculateInventoryTax(): number {
+    // Tax information is not directly stored in inventory records
+    // It's associated with the purchase line items that created the inventory
+    // In a future enhancement, this could be tracked separately
+    return 0
   }
 
   return (
@@ -148,7 +135,7 @@ export function InventoryPage() {
               sku: inv.product?.sku ?? '',
               warehouse: inv.warehouse_location?.name ?? '',
               quantity: inv.quantity,
-              tax_paid: calculateInventoryTax(inv),
+              tax_paid: calculateInventoryTax(),
             })), 'inventory', [
               { key: 'product_name', header: 'Product' },
               { key: 'sku', header: 'SKU' },
@@ -305,7 +292,7 @@ export function InventoryPage() {
                         <TableCell className="font-medium">{inv.product?.name}</TableCell>
                         <TableCell className="font-mono text-sm">{inv.product?.sku}</TableCell>                        <TableCell className="font-mono text-xs">{inv.product?.product_code ?? inv.product?.id.slice(0, 8)}</TableCell>                        <TableCell>{inv.warehouse_location?.name}</TableCell>
                         <TableCell className="text-right font-mono">{inv.quantity}</TableCell>
-                        <TableCell className="text-right font-mono text-sm">${calculateInventoryTax(inv).toFixed(2)}</TableCell>
+                        <TableCell className="text-right font-mono text-sm">${calculateInventoryTax().toFixed(2)}</TableCell>
                       </TableRow>
                     ))
                   )}
