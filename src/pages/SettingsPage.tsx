@@ -245,18 +245,17 @@ function ChannelSettings({ isAdmin }: { isAdmin: boolean }) {
           <CardTitle>Sales Channels</CardTitle>
           <CardDescription>Manage channels and commission rates</CardDescription>
         </div>
-        {isAdmin && (
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm">
-                <Plus className="h-4 w-4 mr-1" /> Add Channel
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Add Sales Channel</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogTrigger asChild>
+            <Button size="sm">
+              <Plus className="h-4 w-4 mr-1" /> Add Channel
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Add Sales Channel</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
                 <div className="space-y-2">
                   <Label>Channel Name</Label>
                   <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g., Amazon" />
@@ -271,7 +270,6 @@ function ChannelSettings({ isAdmin }: { isAdmin: boolean }) {
               </div>
             </DialogContent>
           </Dialog>
-        )}
       </CardHeader>
       <CardContent className="overflow-x-auto">
         <Table>
@@ -287,23 +285,19 @@ function ChannelSettings({ isAdmin }: { isAdmin: boolean }) {
               <TableRow key={ch.id}>
                 <TableCell className="font-medium">{ch.name}</TableCell>
                 <TableCell>
-                  {isAdmin ? (
-                    <Input
-                      type="number"
-                      step="0.1"
-                      className="w-20 h-8"
-                      defaultValue={ch.commission_percent}
-                      onBlur={(e) => {
-                        const val = parseFloat(e.target.value)
-                        if (!isNaN(val) && val !== ch.commission_percent) {
-                          updateCommission.mutate({ id: ch.id, value: val })
-                        }
-                      }}
-                      onFocus={(e) => e.target.select()}
-                    />
-                  ) : (
-                    `${ch.commission_percent}%`
-                  )}
+                  <Input
+                    type="number"
+                    step="0.1"
+                    className="w-20 h-8"
+                    defaultValue={ch.commission_percent}
+                    onBlur={(e) => {
+                      const val = parseFloat(e.target.value)
+                      if (!isNaN(val) && val !== ch.commission_percent) {
+                        updateCommission.mutate({ id: ch.id, value: val })
+                      }
+                    }}
+                    onFocus={(e) => e.target.select()}
+                  />
                 </TableCell>
                 <TableCell>
                   <Badge variant={ch.status === 'active' ? 'success' : 'secondary'}>{ch.status}</Badge>
