@@ -323,8 +323,8 @@ CREATE POLICY "Authenticated can delete allocations" ON public.purchase_allocati
 
 -- Sales channels: all read, admins manage
 CREATE POLICY "Authenticated can read channels" ON public.sales_channels FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Admins can manage channels" ON public.sales_channels FOR INSERT TO authenticated WITH CHECK (public.get_user_role() = 'admin');
-CREATE POLICY "Admins can update channels" ON public.sales_channels FOR UPDATE TO authenticated USING (public.get_user_role() = 'admin');
+CREATE POLICY "Authenticated can create channels" ON public.sales_channels FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "Authenticated can update channels" ON public.sales_channels FOR UPDATE TO authenticated USING (true);
 
 -- Channel pricing: authenticated read and manage
 CREATE POLICY "Authenticated can read pricing" ON public.channel_pricing FOR SELECT TO authenticated USING (true);
