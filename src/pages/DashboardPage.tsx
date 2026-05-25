@@ -350,7 +350,7 @@ export function DashboardPage() {
     { key: 'inventory', name: 'Total Inventory', value: inventoryTotal ?? 0, icon: BoxIcon, href: '/inventory', color: 'from-emerald-500 to-emerald-600', bg: 'bg-emerald-500/10' },
     { key: 'purchases', name: 'Total Purchases', value: purchaseStats?.total ?? 0, icon: ShoppingCart, href: '/purchases', color: 'from-violet-500 to-violet-600', bg: 'bg-violet-500/10' },
     { key: 'suppliers', name: 'Active Suppliers', value: supplierCount ?? 0, icon: Truck, href: '/suppliers', color: 'from-amber-500 to-amber-600', bg: 'bg-amber-500/10' },
-    { key: 'channels', name: 'Sales Channels', value: channelCount ?? 0, icon: BarChart3, href: '/pricing', color: 'from-rose-500 to-rose-600', bg: 'bg-rose-500/10' },
+    { key: 'channels', name: 'Sales Channels', value: channelCount ?? 0, icon: BarChart3, href: '/sales-channels', color: 'from-rose-500 to-rose-600', bg: 'bg-rose-500/10' },
     { key: 'warehouses', name: 'Warehouses', value: warehouseCount ?? 0, icon: Warehouse, href: '/settings', color: 'from-cyan-500 to-cyan-600', bg: 'bg-cyan-500/10' },
   ]
 

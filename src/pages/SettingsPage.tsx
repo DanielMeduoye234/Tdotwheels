@@ -176,7 +176,7 @@ function WarehouseSettings({ isAdmin }: { isAdmin: boolean }) {
   )
 }
 
-function ChannelSettings({ isAdmin }: { isAdmin: boolean }) {
+function ChannelSettings({ isAdmin: _isAdmin }: { isAdmin: boolean }) {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [newName, setNewName] = useState('')
   const [newCommission, setNewCommission] = useState('15')

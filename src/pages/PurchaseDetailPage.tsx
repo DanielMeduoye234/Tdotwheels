@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { formatCurrency } from '@/lib/utils'
 import { toast } from 'sonner'
 import { logDashboardActivity } from '@/lib/audit'
@@ -38,6 +39,7 @@ export function PurchaseDetailPage() {
   const [editLineTaxPercent, setEditLineTaxPercent] = useState('')
   const [editCostAmount, setEditCostAmount] = useState('')
   const [editCostNotes, setEditCostNotes] = useState('')
+  const [editDialogTab, setEditDialogTab] = useState('details')
 
   const { data: suppliers } = useQuery({
     queryKey: ['suppliers-active-for-purchase-detail'],
@@ -106,16 +108,41 @@ export function PurchaseDetailPage() {
         throw new Error('Purchase must have at least one line item')
       }
 
-      // Calculate landed costs
+      // ── LANDED COST CALCULATION ──
+      // Landed Cost = (Unit Cost + Portion of Additional Costs + Non-Recoverable Tax) / Quantity
+      // 
+      // Step 1: Calculate total value of all line items (quantity × unit cost)
+      // Step 2: For each line item, calculate its proportion of the total value
+      // Step 3: Allocate additional costs proportionally to each line item
+      //         Additional Cost Allocation = Total Additional Costs × (Line Item Value / Total Value)
+      // Step 4: Add non-recoverable tax (recoverable tax is not included in landed cost)
+      // Step 5: Divide by quantity to get landed unit cost
+      //
+      // Example:
+      // - Line Item 1: 100 units @ $10 = $1,000 (40% of $2,500 total)
+      // - Line Item 2: 50 units @ $30 = $1,500 (60% of $2,500 total)
+      // - Additional Costs: $100 (shipping)
+      // - Line Item 1 gets $40 of shipping (40% × $100)
+      // - Line Item 2 gets $60 of shipping (60% × $100)
+      // - Line Item 1 landed unit cost = ($1,000 + $40 + tax) / 100
+      // - Line Item 2 landed unit cost = ($1,500 + $60 + tax) / 50
+
       const totalLineValue = lineItems.reduce((sum, li) => sum + li.unit_cost * li.quantity, 0)
       const totalAdditionalCosts = additionalCosts?.reduce((sum, c) => sum + c.amount, 0) ?? 0
 
-      // Update each line item with landed cost
+      // Update each line item with calculated landed cost
       for (const li of lineItems) {
         const lineValue = li.unit_cost * li.quantity
         const proportion = totalLineValue > 0 ? lineValue / totalLineValue : 0
+        
+        // Distribute additional costs proportionally based on line item value
         const allocatedCosts = totalAdditionalCosts * proportion
+        
+        // Only non-recoverable tax is included in landed cost
+        // Recoverable tax (VAT, GST, etc.) is deducted and not part of landed cost
         const lineNonRecTax = li.tax_recoverability === 'non_recoverable' ? li.tax_amount : 0
+        
+        // Final landed unit cost calculation
         const landedUnitCost = (li.unit_cost * li.quantity + allocatedCosts + lineNonRecTax) / li.quantity
 
         await supabase
@@ -382,6 +409,7 @@ export function PurchaseDetailPage() {
     setEditSupplierId(purchase.supplier_id)
     setEditInvoiceDate(purchase.invoice_date)
     setEditNotes(purchase.notes ?? '')
+    setEditDialogTab('details')
     setEditDialogOpen(true)
   }
 
@@ -435,40 +463,173 @@ export function PurchaseDetailPage() {
       </div>
 
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Purchase Invoice</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Invoice Number *</Label>
-              <Input value={editInvoiceNumber} onChange={(e) => setEditInvoiceNumber(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label>Supplier *</Label>
-              <Select value={editSupplierId} onValueChange={setEditSupplierId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select supplier" />
-                </SelectTrigger>
-                <SelectContent>
-                  {suppliers?.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Invoice Date *</Label>
-              <Input type="date" value={editInvoiceDate} onChange={(e) => setEditInvoiceDate(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label>Notes</Label>
-              <Input value={editNotes} onChange={(e) => setEditNotes(e.target.value)} />
-            </div>
-            <Button className="w-full" onClick={() => updatePurchase.mutate()} disabled={updatePurchase.isPending}>
-              {updatePurchase.isPending ? 'Saving...' : 'Save Changes'}
-            </Button>
-          </div>
+          <Tabs value={editDialogTab} onValueChange={setEditDialogTab} className="w-full">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="details">Invoice Details</TabsTrigger>
+              <TabsTrigger value="line-items">Line Items</TabsTrigger>
+              <TabsTrigger value="costs">Additional Costs</TabsTrigger>
+            </TabsList>
+
+            {/* Invoice Details Tab */}
+            <TabsContent value="details" className="space-y-4 mt-4">
+              <div className="space-y-2">
+                <Label>Invoice Number *</Label>
+                <Input value={editInvoiceNumber} onChange={(e) => setEditInvoiceNumber(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Supplier *</Label>
+                <Select value={editSupplierId} onValueChange={setEditSupplierId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select supplier" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {suppliers?.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Invoice Date *</Label>
+                <Input type="date" value={editInvoiceDate} onChange={(e) => setEditInvoiceDate(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Notes</Label>
+                <Input value={editNotes} onChange={(e) => setEditNotes(e.target.value)} />
+              </div>
+              <Button className="w-full" onClick={() => updatePurchase.mutate()} disabled={updatePurchase.isPending}>
+                {updatePurchase.isPending ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </TabsContent>
+
+            {/* Line Items Tab */}
+            <TabsContent value="line-items" className="space-y-4 mt-4">
+              <div className="space-y-4">
+                {lineItems?.length === 0 ? (
+                  <div className="text-center text-muted-foreground py-6">
+                    No line items. Add products to this purchase.
+                  </div>
+                ) : (
+                  <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                    {lineItems?.map((item: any) => (
+                      <div key={item.id} className="border rounded-lg p-3 space-y-3">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <div className="font-medium">{item.product?.name}</div>
+                            <div className="text-sm text-muted-foreground font-mono">{item.product?.sku}</div>
+                          </div>
+                          <div className="flex gap-1">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8"
+                              onClick={() => {
+                                setEditingLineItem(item)
+                                setEditLineQuantity(String(item.quantity))
+                                setEditLineUnitCost(String(item.unit_cost))
+                                setEditLineTaxPercent(String(item.tax_percent))
+                                setEditLineItemOpen(true)
+                              }}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8 text-destructive"
+                              onClick={() => {
+                                if (!confirm('Delete this line item?')) return
+                                deleteLineItem.mutate(item.id)
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          <div>
+                            <span className="text-muted-foreground">Qty:</span> <span className="font-medium">{item.quantity}</span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Unit Cost:</span> <span className="font-medium">{formatCurrency(item.unit_cost)}</span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Sub Total:</span> <span className="font-medium">{formatCurrency(item.unit_cost * item.quantity)}</span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Tax:</span> <span className="font-medium">{formatCurrency(item.tax_amount)}</span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Tax Type:</span> <Badge variant={item.tax_recoverability === 'recoverable' ? 'outline' : 'destructive'} className="text-xs">{item.tax_recoverability === 'recoverable' ? 'Recoverable' : 'Non-Rec'}</Badge>
+                          </div>
+                          <div className="col-span-2">
+                            <span className="text-muted-foreground">Landed Cost:</span> <span className="font-medium">{formatCurrency((item.unit_cost * item.quantity) + item.tax_amount)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </TabsContent>
+
+            {/* Additional Costs Tab */}
+            <TabsContent value="costs" className="space-y-4 mt-4">
+              <div className="space-y-4">
+                {additionalCosts?.length === 0 ? (
+                  <div className="text-center text-muted-foreground py-6">
+                    No additional costs
+                  </div>
+                ) : (
+                  <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                    {additionalCosts?.map((cost) => (
+                      <div key={cost.id} className="border rounded-lg p-3 space-y-2">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <div className="font-medium capitalize">{cost.cost_type.replace('_', ' ')}</div>
+                            {cost.notes && <div className="text-sm text-muted-foreground">{cost.notes}</div>}
+                          </div>
+                          <div className="flex gap-1">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8"
+                              onClick={() => {
+                                setEditingCost(cost)
+                                setEditCostAmount(String(cost.amount))
+                                setEditCostNotes(cost.notes ?? '')
+                                setEditCostOpen(true)
+                              }}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8 text-destructive"
+                              onClick={() => {
+                                if (!confirm('Delete this additional cost?')) return
+                                deleteAdditionalCost.mutate(cost.id)
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="text-right font-medium text-primary">
+                          {formatCurrency(cost.amount)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </TabsContent>
+          </Tabs>
         </DialogContent>
       </Dialog>
 
@@ -540,9 +701,9 @@ export function PurchaseDetailPage() {
                 <TableHead>Product</TableHead>
                 <TableHead className="text-right">Qty</TableHead>
                 <TableHead className="text-right">Unit Cost</TableHead>
+                <TableHead className="text-right">Sub Total</TableHead>
                 <TableHead className="text-right">Tax</TableHead>
                 <TableHead>Tax Type</TableHead>
-                <TableHead className="text-right">Line Total</TableHead>
                 <TableHead className="text-right">Landed Cost</TableHead>
                 {isDraft && <TableHead className="text-right">Actions</TableHead>}
               </TableRow>
@@ -563,6 +724,9 @@ export function PurchaseDetailPage() {
                     </TableCell>
                     <TableCell className="text-right">{item.quantity}</TableCell>
                     <TableCell className="text-right">{formatCurrency(item.unit_cost)}</TableCell>
+                    <TableCell className="text-right font-medium">
+                      {formatCurrency(item.unit_cost * item.quantity)}
+                    </TableCell>
                     <TableCell className="text-right">{formatCurrency(item.tax_amount)}</TableCell>
                     <TableCell>
                       <Badge variant={item.tax_recoverability === 'recoverable' ? 'outline' : 'destructive'}>
@@ -570,10 +734,7 @@ export function PurchaseDetailPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right font-medium">
-                      {formatCurrency(item.unit_cost * item.quantity)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {item.landed_unit_cost ? formatCurrency(item.landed_unit_cost) : '—'}
+                      {formatCurrency((item.unit_cost * item.quantity) + item.tax_amount)}
                     </TableCell>
                     {(isDraft || canEdit) && (
                       <TableCell className="text-right">

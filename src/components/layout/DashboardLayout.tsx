@@ -15,6 +15,7 @@ import {
   ClipboardList,
   MapPin,
   CircleDot,
+  BarChart3,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
@@ -27,6 +28,7 @@ const navigation = [
   { name: 'Purchases', href: '/purchases', icon: ShoppingCart },
   { name: 'Tracking', href: '/tracking', icon: MapPin },
   { name: 'Suppliers', href: '/suppliers', icon: Truck },
+  { name: 'Sales Channels', href: '/sales-channels', icon: BarChart3 },
   { name: 'Activity Log', href: '/activity', icon: ClipboardList },
   { name: 'Pricing', href: '/pricing', icon: DollarSign },
   { name: 'Profitability', href: '/profitability', icon: TrendingUp },

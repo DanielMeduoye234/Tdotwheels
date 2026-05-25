@@ -19,6 +19,7 @@ import { useAuth } from '@/contexts/AuthContext'
 export function ProductsPage() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [sortBy, setSortBy] = useState<string>('created-desc')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [importing, setImporting] = useState(false)
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set())
@@ -39,18 +40,26 @@ export function ProductsPage() {
   }
 
   const { data: products, isLoading } = useQuery({
-    queryKey: ['products', search, statusFilter],
+    queryKey: ['products', search, statusFilter, sortBy],
     queryFn: async () => {
       let query = supabase
         .from('products')
         .select('*')
-        .order('created_at', { ascending: false })
 
       if (search) {
         query = query.or(`name.ilike.%${search}%,sku.ilike.%${search}%,product_code.ilike.%${search}%`)
       }
       if (statusFilter !== 'all') {
         query = query.eq('status', statusFilter)
+      }
+
+      // Apply sorting based on sortBy state
+      if (sortBy === 'name-asc') {
+        query = query.order('name', { ascending: true })
+      } else if (sortBy === 'name-desc') {
+        query = query.order('name', { ascending: false })
+      } else {
+        query = query.order('created_at', { ascending: false })
       }
 
       const { data, error } = await query
@@ -355,6 +364,16 @@ export function ProductsPage() {
             <SelectItem value="all">All Status</SelectItem>
             <SelectItem value="active">Active</SelectItem>
             <SelectItem value="inactive">Inactive</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={sortBy} onValueChange={setSortBy}>
+          <SelectTrigger className="w-full sm:w-[160px]">
+            <SelectValue placeholder="Sort" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="created-desc">Newest First</SelectItem>
+            <SelectItem value="name-asc">Name (A-Z)</SelectItem>
+            <SelectItem value="name-desc">Name (Z-A)</SelectItem>
           </SelectContent>
         </Select>
         {products && (

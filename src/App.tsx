@@ -11,6 +11,7 @@ import { PurchaseDetailPage } from '@/pages/PurchaseDetailPage'
 import { PricingPage } from '@/pages/PricingPage'
 import { ProfitabilityPage } from '@/pages/ProfitabilityPage'
 import { SuppliersPage } from '@/pages/SuppliersPage'
+import { SalesChannelsPage } from '@/pages/SalesChannelsPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { ActivityLogPage } from '@/pages/ActivityLogPage'
 import { ShipmentTrackingPage } from '@/pages/ShipmentTrackingPage'
@@ -58,6 +59,7 @@ export default function App() {
                 <Route path="/pricing" element={<PricingPage />} />
                 <Route path="/profitability" element={<ProfitabilityPage />} />
                 <Route path="/suppliers" element={<SuppliersPage />} />
+                <Route path="/sales-channels" element={<SalesChannelsPage />} />
                 <Route path="/activity" element={<ActivityLogPage />} />
                 <Route path="/tracking" element={<ShipmentTrackingPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
