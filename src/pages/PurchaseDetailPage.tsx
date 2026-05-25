@@ -1094,7 +1094,7 @@ function AddLineItemForm({
   const { data: products } = useQuery({
     queryKey: ['products-list'],
     queryFn: async () => {
-      const { data } = await supabase.from('products').select('id, name, sku, product_code, status').eq('status', 'active').order('name')
+      const { data } = await supabase.from('products').select('id, name, sku, product_code, status').order('name')
       return data ?? []
     },
   })
