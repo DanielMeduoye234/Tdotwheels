@@ -37,6 +37,7 @@ export function PurchaseDetailPage() {
   const [editLineQuantity, setEditLineQuantity] = useState('')
   const [editLineUnitCost, setEditLineUnitCost] = useState('')
   const [editLineTaxPercent, setEditLineTaxPercent] = useState('')
+  const [editLineTaxRecoverability, setEditLineTaxRecoverability] = useState<'recoverable' | 'non_recoverable'>('recoverable')
   const [editCostAmount, setEditCostAmount] = useState('')
   const [editCostNotes, setEditCostNotes] = useState('')
   const [editDialogTab, setEditDialogTab] = useState('details')
@@ -306,11 +307,11 @@ export function PurchaseDetailPage() {
   })
 
   const updateLineItem = useMutation({
-    mutationFn: async ({ itemId, quantity, unitCost, taxPercent }: { itemId: string; quantity: number; unitCost: number; taxPercent: number }) => {
+    mutationFn: async ({ itemId, quantity, unitCost, taxPercent, taxRecoverability }: { itemId: string; quantity: number; unitCost: number; taxPercent: number; taxRecoverability: 'recoverable' | 'non_recoverable' }) => {
       const taxAmount = Number(((quantity * unitCost * taxPercent) / 100).toFixed(2))
       const { error } = await supabase
         .from('purchase_line_items')
-        .update({ quantity, unit_cost: unitCost, tax_percent: taxPercent, tax_amount: taxAmount })
+        .update({ quantity, unit_cost: unitCost, tax_percent: taxPercent, tax_amount: taxAmount, tax_recoverability: taxRecoverability })
         .eq('id', itemId)
       if (error) throw error
     },
@@ -532,6 +533,7 @@ export function PurchaseDetailPage() {
                                 setEditLineQuantity(String(item.quantity))
                                 setEditLineUnitCost(String(item.unit_cost))
                                 setEditLineTaxPercent(String(item.tax_percent))
+                                setEditLineTaxRecoverability(item.tax_recoverability)
                                 setEditLineItemOpen(true)
                               }}
                             >
@@ -673,26 +675,24 @@ export function PurchaseDetailPage() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Line Items</CardTitle>
-          {isDraft && (
-            <Dialog open={lineDialogOpen} onOpenChange={setLineDialogOpen}>
-              <DialogTrigger asChild>
-                <Button size="sm">
-                  <Plus className="h-4 w-4 mr-1" /> Add Item
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Add Line Item</DialogTitle>
-                </DialogHeader>
-                <AddLineItemForm
-                  purchaseId={id!}
-                  invoiceNumber={purchase.invoice_number}
-                  userId={user?.id}
-                  onSuccess={() => setLineDialogOpen(false)}
-                />
-              </DialogContent>
-            </Dialog>
-          )}
+          <Dialog open={lineDialogOpen} onOpenChange={setLineDialogOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm">
+                <Plus className="h-4 w-4 mr-1" /> Add Item
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add Line Item</DialogTitle>
+              </DialogHeader>
+              <AddLineItemForm
+                purchaseId={id!}
+                invoiceNumber={purchase.invoice_number}
+                userId={user?.id}
+                onSuccess={() => setLineDialogOpen(false)}
+              />
+            </DialogContent>
+          </Dialog>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <Table>
@@ -748,6 +748,7 @@ export function PurchaseDetailPage() {
                               setEditLineQuantity(String(item.quantity))
                               setEditLineUnitCost(String(item.unit_cost))
                               setEditLineTaxPercent(String(item.tax_percent))
+                              setEditLineTaxRecoverability(item.tax_recoverability)
                               setEditLineItemOpen(true)
                             }}
                           >
@@ -862,7 +863,7 @@ export function PurchaseDetailPage() {
       </Card>
 
       {/* Allocations */}
-      {isDraft && lineItems && lineItems.length > 0 && (
+      {lineItems && lineItems.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>Warehouse Allocations</CardTitle>
@@ -925,6 +926,18 @@ export function PurchaseDetailPage() {
                   placeholder="Tax percentage"
                 />
               </div>
+              <div>
+                <Label htmlFor="edit-tax-recoverability">Tax Type</Label>
+                <Select value={editLineTaxRecoverability} onValueChange={(value: any) => setEditLineTaxRecoverability(value)}>
+                  <SelectTrigger id="edit-tax-recoverability">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="recoverable">Recoverable</SelectItem>
+                    <SelectItem value="non_recoverable">Non-Recoverable</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="flex gap-2 justify-end">
                 <Button variant="outline" onClick={() => setEditLineItemOpen(false)}>
                   Cancel
@@ -938,7 +951,7 @@ export function PurchaseDetailPage() {
                       toast.error('Please enter valid numbers')
                       return
                     }
-                    updateLineItem.mutate({ itemId: editingLineItem.id, quantity, unitCost, taxPercent })
+                    updateLineItem.mutate({ itemId: editingLineItem.id, quantity, unitCost, taxPercent, taxRecoverability: editLineTaxRecoverability })
                     setEditLineItemOpen(false)
                   }}
                 >
