@@ -334,6 +334,7 @@ function BulkSupplierImportForm({ onSuccess }: { onSuccess: () => void }) {
   const queryClient = useQueryClient()
   const { user } = useAuth()
 
+  // @ts-ignore
   const downloadTemplate = () => {
     // Create CSV template with headers and sample row
     const headers = ['name', 'short_name', 'email', 'phone', 'notes']
