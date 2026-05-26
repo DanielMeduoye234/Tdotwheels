@@ -334,6 +334,32 @@ function BulkSupplierImportForm({ onSuccess }: { onSuccess: () => void }) {
   const queryClient = useQueryClient()
   const { user } = useAuth()
 
+  const downloadTemplate = () => {
+    // Create CSV template with headers and sample row
+    const headers = ['name', 'short_name', 'email', 'phone', 'notes']
+    const sampleRow = ['ABC Supplies', 'ABC', 'contact@abcsupplies.com', '+1234567890', 'Sample supplier']
+    
+    const csvContent = [
+      headers.join(','),
+      sampleRow.join(','),
+    ].join('\n')
+    
+    // Create blob and download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    
+    link.setAttribute('href', url)
+    link.setAttribute('download', 'supplier_template.csv')
+    link.style.visibility = 'hidden'
+    
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    
+    toast.success('Template downloaded')
+  }
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
@@ -504,6 +530,9 @@ function BulkSupplierImportForm({ onSuccess }: { onSuccess: () => void }) {
             onChange={handleFileUpload}
             className="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground hover:file:bg-accent cursor-pointer flex-1"
           />
+          <Button size="sm" variant="outline" onClick={downloadTemplate} title="Download CSV template">
+            <Download className="h-4 w-4" />
+          </Button>
           {fileName && <span className="text-xs text-muted-foreground truncate">{fileName}</span>}
         </div>
       </div>

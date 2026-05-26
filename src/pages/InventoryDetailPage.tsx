@@ -42,14 +42,17 @@ export function InventoryDetailPage() {
   const { data: details, isLoading } = useQuery({
     queryKey: ['inventory-detail', productId],
     queryFn: async (): Promise<InventoryDetail> => {
-      // Get product info
+      // Get product info first
       const { data: product, error: prodError } = await supabase
         .from('products')
         .select('id, name, sku, product_code')
         .eq('id', productId)
         .single()
 
-      if (prodError) throw prodError
+      if (prodError) {
+        console.error('Product query error:', prodError)
+        throw prodError
+      }
       if (!product) throw new Error('Product not found')
 
       // Get all inventory locations for this product
@@ -64,43 +67,52 @@ export function InventoryDetailPage() {
 
       if (locError) throw locError
 
-      // Get purchase history via allocations
-      const { data: purchaseHist, error: purchaseError } = await supabase
-        .from('purchase_allocations')
-        .select(`
-          quantity,
-          warehouse_location:warehouse_locations(name),
-          purchase_line_item:purchase_line_items(
-            id,
-            quantity,
-            unit_cost,
-            tax_percent,
-            tax_amount,
-            tax_recoverability,
-            purchase:purchases(
-              id,
-              invoice_number,
-              invoice_date,
-              supplier:suppliers(name)
-            )
-          )
-        `)
-        .eq('purchase_line_item.product_id', product.id)
+      // Get purchase line items for this product first
+      const { data: lineItems, error: lineError } = await supabase
+        .from('purchase_line_items')
+        .select('*')
+        .eq('product_id', product.id)
 
-      if (purchaseError) throw purchaseError
+      if (lineError) throw lineError
 
-      const purchaseHistory = (purchaseHist || []).map((alloc: any) => ({
-        purchase_id: alloc.purchase_line_item.purchase.id,
-        invoice_number: alloc.purchase_line_item.purchase.invoice_number,
-        supplier_name: alloc.purchase_line_item.purchase.supplier.name,
-        invoice_date: alloc.purchase_line_item.purchase.invoice_date,
-        quantity_allocated: alloc.quantity,
-        unit_cost: alloc.purchase_line_item.unit_cost,
-        tax_percent: alloc.purchase_line_item.tax_percent,
-        tax_amount: alloc.purchase_line_item.tax_amount,
-        tax_recoverability: alloc.purchase_line_item.tax_recoverability,
-        allocated_to_warehouse: alloc.warehouse_location.name,
-      }))
+      let purchaseHistory: any[] = []
+      
+      // Get purchase allocations for these line items  
+      if (lineItems && lineItems.length > 0) {
+        const { data: purchaseAllocs, error: allocError } = await supabase
+          .from('purchase_allocations')
+          .select('*, warehouse_location:warehouse_locations(name)')
+          .in('purchase_line_item_id', lineItems.map((li: any) => li.id))
+
+        if (allocError) throw allocError
+
+        // Get purchases data for the line items
+        const { data: purchases, error: purchError } = await supabase
+          .from('purchases')
+          .select('id, invoice_number, invoice_date, supplier:suppliers(name)')
+          .in('id', Array.from(new Set(lineItems.map((li: any) => li.purchase_id))))
+
+        if (purchError) throw purchError
+
+        // Combine the data
+        purchaseHistory = (purchaseAllocs || []).map((alloc: any) => {
+          const lineItem = lineItems.find((li: any) => li.id === alloc.purchase_line_item_id)
+          const purchase: any = (purchases || []).find((p: any) => p.id === lineItem?.purchase_id)
+          const supplierName = Array.isArray(purchase?.supplier) ? purchase.supplier[0]?.name : purchase?.supplier?.name
+          return {
+            purchase_id: purchase?.id || '',
+            invoice_number: purchase?.invoice_number || '',
+            supplier_name: supplierName || '',
+            invoice_date: purchase?.invoice_date || '',
+            quantity_allocated: alloc.quantity,
+            unit_cost: lineItem?.unit_cost || 0,
+            tax_percent: lineItem?.tax_percent || 0,
+            tax_amount: lineItem?.tax_amount || 0,
+            tax_recoverability: lineItem?.tax_recoverability || '',
+            allocated_to_warehouse: alloc.warehouse_location?.name || '',
+          }
+        })
+      }
 
       const totalTaxPaid = purchaseHistory.reduce((sum: number, item: any) => sum + item.tax_amount, 0)
       const totalQuantityReceived = purchaseHistory.reduce((sum: number, item: any) => sum + item.quantity_allocated, 0)
