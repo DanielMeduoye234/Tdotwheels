@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
@@ -16,6 +17,7 @@ import { toast } from 'sonner'
 import { logDashboardActivity } from '@/lib/audit'
 
 export function InventoryPage() {
+  const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [warehouseFilter, setWarehouseFilter] = useState<string>('all')
   const [adjustDialogOpen, setAdjustDialogOpen] = useState(false)
@@ -37,7 +39,7 @@ export function InventoryPage() {
         .from('inventory')
         .select(`
           *,
-          product:products(id, name, sku),
+          product:products(id, name, sku, product_code),
           warehouse_location:warehouse_locations(id, name)
         `)
 
@@ -58,6 +60,37 @@ export function InventoryPage() {
       }
 
       return data
+    },
+  })
+
+  // Query to get tax information for each inventory item
+  const { data: inventoryTaxMap } = useQuery({
+    queryKey: ['inventory-tax-info'],
+    queryFn: async () => {
+      const { data: allocations, error } = await supabase
+        .from('purchase_allocations')
+        .select(`
+          warehouse_location_id,
+          purchase_line_item:purchase_line_items(
+            product_id,
+            tax_amount
+          )
+        `)
+
+      if (error) throw error
+
+      // Map: {inventory_id or product_warehouse_combo} -> total_tax
+      const taxMap: Record<string, number> = {}
+      
+      allocations?.forEach((alloc: any) => {
+        const key = `${alloc.purchase_line_item.product_id}-${alloc.warehouse_location_id}`
+        if (!taxMap[key]) {
+          taxMap[key] = 0
+        }
+        taxMap[key] += alloc.purchase_line_item.tax_amount
+      })
+
+      return taxMap
     },
   })
 
@@ -94,6 +127,7 @@ export function InventoryPage() {
     if (!productId) return acc
     if (!acc[productId]) {
       acc[productId] = {
+        inventoryId: inv.id,
         product: inv.product,
         total: 0,
         locations: [],
@@ -101,7 +135,8 @@ export function InventoryPage() {
       }
     }
     acc[productId].total += inv.quantity
-    const invTax = calculateInventoryTax()
+    const taxKey = `${inv.product_id}-${inv.warehouse_location_id}`
+    const invTax = inventoryTaxMap?.[taxKey] ?? 0
     acc[productId].totalTax += invTax
     if (inv.quantity > 0) {
       acc[productId].locations.push({
@@ -113,13 +148,6 @@ export function InventoryPage() {
     return acc
   }, {})
 
-  function calculateInventoryTax(): number {
-    // Tax information is not directly stored in inventory records
-    // It's associated with the purchase line items that created the inventory
-    // In a future enhancement, this could be tracked separately
-    return 0
-  }
-
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -130,13 +158,17 @@ export function InventoryPage() {
         <div className="flex gap-2 flex-wrap">
           <Button variant="outline" size="sm" onClick={() => {
             if (!inventory?.length) return
-            exportToCSV(inventory.map((inv: any) => ({
-              product_name: inv.product?.name ?? '',
-              sku: inv.product?.sku ?? '',
-              warehouse: inv.warehouse_location?.name ?? '',
-              quantity: inv.quantity,
-              tax_paid: calculateInventoryTax(),
-            })), 'inventory', [
+            exportToCSV(inventory.map((inv: any) => {
+              const taxKey = `${inv.product_id}-${inv.warehouse_location_id}`
+              const taxAmount = inventoryTaxMap?.[taxKey] ?? 0
+              return {
+                product_name: inv.product?.name ?? '',
+                sku: inv.product?.sku ?? '',
+                warehouse: inv.warehouse_location?.name ?? '',
+                quantity: inv.quantity,
+                tax_paid: taxAmount,
+              }
+            }), 'inventory', [
               { key: 'product_name', header: 'Product' },
               { key: 'sku', header: 'SKU' },
               { key: 'warehouse', header: 'Warehouse' },
@@ -244,8 +276,13 @@ export function InventoryPage() {
                     </TableRow>
                   ) : (
                     Object.values(inventorySummary).map((item: any) => (
-                      <TableRow key={item.product.id}>
-                        <TableCell className="font-medium">{item.product.name}</TableCell>
+                      <TableRow key={item.product.id} className="cursor-pointer hover:bg-muted/50">
+                        <TableCell 
+                          className="font-medium text-primary hover:underline"
+                          onClick={() => navigate(`/inventory/${item.inventoryId}`)}
+                        >
+                          {item.product.name}
+                        </TableCell>
                         <TableCell className="font-mono text-sm">{item.product.sku}</TableCell>
                         <TableCell className="text-right font-bold">{item.total}</TableCell>
                         <TableCell className="text-sm text-muted-foreground">
@@ -287,14 +324,25 @@ export function InventoryPage() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    inventory?.filter((inv: any) => inv.quantity > 0).map((inv: any) => (
-                      <TableRow key={inv.id}>
-                        <TableCell className="font-medium">{inv.product?.name}</TableCell>
-                        <TableCell className="font-mono text-sm">{inv.product?.sku}</TableCell>                        <TableCell className="font-mono text-xs">{inv.product?.product_code ?? inv.product?.id.slice(0, 8)}</TableCell>                        <TableCell>{inv.warehouse_location?.name}</TableCell>
-                        <TableCell className="text-right font-mono">{inv.quantity}</TableCell>
-                        <TableCell className="text-right font-mono text-sm">${calculateInventoryTax().toFixed(2)}</TableCell>
-                      </TableRow>
-                    ))
+                    inventory?.filter((inv: any) => inv.quantity > 0).map((inv: any) => {
+                      const taxKey = `${inv.product_id}-${inv.warehouse_location_id}`
+                      const taxAmount = inventoryTaxMap?.[taxKey] ?? 0
+                      return (
+                        <TableRow key={inv.id} className="cursor-pointer hover:bg-muted/50">
+                          <TableCell 
+                            className="font-medium text-primary hover:underline"
+                            onClick={() => navigate(`/inventory/${inv.id}`)}
+                          >
+                            {inv.product?.name}
+                          </TableCell>
+                          <TableCell className="font-mono text-sm">{inv.product?.sku}</TableCell>
+                          <TableCell className="font-mono text-xs">{inv.product?.product_code ?? inv.product?.id.slice(0, 8)}</TableCell>
+                          <TableCell>{inv.warehouse_location?.name}</TableCell>
+                          <TableCell className="text-right font-mono">{inv.quantity}</TableCell>
+                          <TableCell className="text-right font-mono text-sm">${taxAmount.toFixed(2)}</TableCell>
+                        </TableRow>
+                      )
+                    })
                   )}
                 </TableBody>
               </Table>

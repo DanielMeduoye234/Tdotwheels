@@ -6,6 +6,7 @@ import { DashboardPage } from '@/pages/DashboardPage'
 import { ProductsPage } from '@/pages/ProductsPage'
 import { ProductDetailPage } from '@/pages/ProductDetailPage'
 import { InventoryPage } from '@/pages/InventoryPage'
+import { InventoryDetailPage } from '@/pages/InventoryDetailPage'
 import { PurchasesPage } from '@/pages/PurchasesPage'
 import { PurchaseDetailPage } from '@/pages/PurchaseDetailPage'
 import { PricingPage } from '@/pages/PricingPage'
@@ -54,6 +55,7 @@ export default function App() {
                 <Route path="/products" element={<ProductsPage />} />
                 <Route path="/products/:id" element={<ProductDetailPage />} />
                 <Route path="/inventory" element={<InventoryPage />} />
+                <Route path="/inventory/:inventoryId" element={<InventoryDetailPage />} />
                 <Route path="/purchases" element={<PurchasesPage />} />
                 <Route path="/purchases/:id" element={<PurchaseDetailPage />} />
                 <Route path="/pricing" element={<PricingPage />} />
