@@ -323,13 +323,16 @@ export function PurchaseDetailPage() {
         if (oldValues.oldTaxPercent !== editingLineItem?.tax_percent) changes['Tax %'] = { old: `${oldValues.oldTaxPercent}%`, new: `${editingLineItem?.tax_percent}%` }
         if (oldValues.oldTaxRecoverability !== editingLineItem?.tax_recoverability) changes['Tax Type'] = { old: oldValues.oldTaxRecoverability, new: editingLineItem?.tax_recoverability }
         
+        const productName = editingLineItem?.product?.name || 'Unknown Product'
+        const productSku = editingLineItem?.product?.sku || ''
         await logDashboardActivity({
           entityType: 'purchase_line_item',
           action: 'update',
           userId: user.id,
           entityId: id,
-          description: `Edited line item in invoice ${purchase.invoice_number}`,
+          description: `Edited line item: "${productName}" (${productSku}) in invoice ${purchase.invoice_number}`,
           changes: Object.keys(changes).length > 0 ? changes : undefined,
+          metadata: { product_name: productName, product_sku: productSku },
         })
       }
       toast.success('Line item updated')
@@ -347,13 +350,15 @@ export function PurchaseDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['purchase-line-items', id] })
       queryClient.invalidateQueries({ queryKey: ['purchase-allocations', id] })
       if (user && purchase) {
+        const productName = deletedItem.product?.name || 'Unknown Product'
+        const productSku = deletedItem.product?.sku || ''
         await logDashboardActivity({
           entityType: 'purchase_line_item',
           action: 'delete',
           userId: user.id,
           entityId: id,
-          description: `Deleted line item (${deletedItem.quantity} units @ $${deletedItem.unit_cost.toFixed(2)} = $${(deletedItem.quantity * deletedItem.unit_cost).toFixed(2)}) from invoice ${purchase.invoice_number}`,
-          metadata: deletedItem,
+          description: `Deleted line item: \"${productName}\" (${productSku}) - ${deletedItem.quantity} units @ $${deletedItem.unit_cost.toFixed(2)} from invoice ${purchase.invoice_number}`,
+          metadata: { product_name: productName, product_sku: productSku, quantity: deletedItem.quantity, unit_cost: deletedItem.unit_cost },
         })
       }
       toast.success('Line item deleted')

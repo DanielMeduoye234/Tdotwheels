@@ -36,34 +36,30 @@ interface InventoryDetail {
 }
 
 export function InventoryDetailPage() {
-  const { inventoryId } = useParams()
+  const { inventoryId: productId } = useParams()
   const navigate = useNavigate()
 
   const { data: details, isLoading } = useQuery({
-    queryKey: ['inventory-detail', inventoryId],
+    queryKey: ['inventory-detail', productId],
     queryFn: async (): Promise<InventoryDetail> => {
-      // Get current inventory details
-      const { data: invData, error: invError } = await supabase
-        .from('inventory')
-        .select(`
-          *,
-          product:products(id, name, sku, product_code),
-          warehouse_location:warehouse_locations(id, name)
-        `)
-        .eq('id', inventoryId)
+      // Get product info
+      const { data: product, error: prodError } = await supabase
+        .from('products')
+        .select('id, name, sku, product_code')
+        .eq('id', productId)
         .single()
 
-      if (invError) throw invError
-      if (!invData) throw new Error('Inventory not found')
+      if (prodError) throw prodError
+      if (!product) throw new Error('Product not found')
 
-      // Get all locations where this product exists
+      // Get all inventory locations for this product
       const { data: locations, error: locError } = await supabase
         .from('inventory')
         .select(`
           quantity,
           warehouse_location:warehouse_locations(name)
         `)
-        .eq('product_id', invData.product_id)
+        .eq('product_id', product.id)
         .gt('quantity', 0)
 
       if (locError) throw locError
@@ -89,7 +85,7 @@ export function InventoryDetailPage() {
             )
           )
         `)
-        .eq('purchase_line_item.product_id', invData.product_id)
+        .eq('purchase_line_item.product_id', product.id)
 
       if (purchaseError) throw purchaseError
 
@@ -110,7 +106,7 @@ export function InventoryDetailPage() {
       const totalQuantityReceived = purchaseHistory.reduce((sum: number, item: any) => sum + item.quantity_allocated, 0)
 
       return {
-        product: invData.product,
+        product: product,
         currentLocations: (locations || [])
           .filter((l: any) => l.quantity > 0)
           .map((l: any) => ({

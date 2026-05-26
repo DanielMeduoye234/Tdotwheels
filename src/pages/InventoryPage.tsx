@@ -127,7 +127,7 @@ export function InventoryPage() {
     if (!productId) return acc
     if (!acc[productId]) {
       acc[productId] = {
-        inventoryId: inv.id,
+        productId: productId,
         product: inv.product,
         total: 0,
         locations: [],
@@ -279,7 +279,7 @@ export function InventoryPage() {
                       <TableRow key={item.product.id} className="cursor-pointer hover:bg-muted/50">
                         <TableCell 
                           className="font-medium text-primary hover:underline"
-                          onClick={() => navigate(`/inventory/${item.inventoryId}`)}
+                          onClick={() => navigate(`/inventory/${item.productId}`)}
                         >
                           {item.product.name}
                         </TableCell>
@@ -331,7 +331,7 @@ export function InventoryPage() {
                         <TableRow key={inv.id} className="cursor-pointer hover:bg-muted/50">
                           <TableCell 
                             className="font-medium text-primary hover:underline"
-                            onClick={() => navigate(`/inventory/${inv.id}`)}
+                            onClick={() => navigate(`/inventory/${inv.product_id}`)}
                           >
                             {inv.product?.name}
                           </TableCell>
