@@ -449,6 +449,8 @@ function AdjustmentForm({ onSuccess }: { onSuccess: () => void }) {
   const [adjustmentType, setAdjustmentType] = useState<'increase' | 'decrease'>('increase')
   const [quantity, setQuantity] = useState('')
   const [reason, setReason] = useState('')
+  const [adjustmentSource, setAdjustmentSource] = useState<'manual' | 'purchase'>('manual')
+  const [purchaseAllocationId, setPurchaseAllocationId] = useState('')
   const queryClient = useQueryClient()
   const { user } = useAuth()
 
@@ -465,6 +467,39 @@ function AdjustmentForm({ onSuccess }: { onSuccess: () => void }) {
     queryFn: async () => {
       const { data } = await supabase.from('warehouse_locations').select('id, name').eq('status', 'active')
       return data ?? []
+    },
+  })
+
+  // Query purchases that contributed to this product/location
+  const { data: purchaseAllocations } = useQuery({
+    queryKey: ['purchase-allocations-for-adjustment', productId, locationId],
+    enabled: !!productId && !!locationId && adjustmentType === 'decrease',
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('purchase_allocations')
+        .select(`
+          id,
+          quantity,
+          warehouse_location:warehouse_locations(name),
+          purchase_line_item:purchase_line_items(
+            id,
+            quantity,
+            unit_cost,
+            tax_amount,
+            purchase:purchases(
+              id,
+              invoice_number,
+              invoice_date,
+              supplier:suppliers(name)
+            )
+          )
+        `)
+        .eq('warehouse_location_id', locationId)
+
+      // Filter to this product
+      return (data ?? []).filter(
+        (alloc: any) => alloc.purchase_line_item?.product_id === productId
+      )
     },
   })
 
@@ -523,6 +558,8 @@ function AdjustmentForm({ onSuccess }: { onSuccess: () => void }) {
           quantity: qty,
           movement_type: adjustmentType === 'increase' ? 'adjustment_increase' : 'adjustment_decrease',
           reason,
+          reference_id: adjustmentSource === 'purchase' ? purchaseAllocationId : null,
+          reference_type: adjustmentSource === 'purchase' ? 'purchase_allocation' : null,
           user_id: user!.id,
         })
       if (movError) throw movError
@@ -531,12 +568,20 @@ function AdjustmentForm({ onSuccess }: { onSuccess: () => void }) {
       queryClient.invalidateQueries({ queryKey: ['inventory'] })
       queryClient.invalidateQueries({ queryKey: ['inventory-movements'] })
       queryClient.invalidateQueries({ queryKey: ['inventory-total'] })
+      queryClient.invalidateQueries({ queryKey: ['inventory-tax-info'] })
       if (user) {
         void logDashboardActivity({
           entityType: 'inventory_adjustment',
           action: 'create',
           userId: user.id,
-          description: `Applied inventory ${adjustmentType} adjustment`,
+          description: `Applied inventory ${adjustmentType} adjustment of ${quantity} units (via ${adjustmentSource === 'purchase' ? 'purchase' : 'manual'})`,
+          metadata: {
+            adjustment_type: adjustmentType,
+            adjustment_source: adjustmentSource,
+            quantity: parseInt(quantity),
+            reason,
+            purchase_allocation_id: adjustmentSource === 'purchase' ? purchaseAllocationId : null,
+          },
         })
       }
       toast.success('Inventory adjusted successfully')
@@ -590,6 +635,59 @@ function AdjustmentForm({ onSuccess }: { onSuccess: () => void }) {
         </Select>
       </div>
 
+      {adjustmentType === 'decrease' && purchaseAllocations && purchaseAllocations.length > 0 && (
+        <div className="space-y-2 bg-muted/30 p-3 rounded border">
+          <Label>Adjustment Source</Label>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <input
+                type="radio"
+                id="manual"
+                value="manual"
+                checked={adjustmentSource === 'manual'}
+                onChange={(e) => {
+                  setAdjustmentSource(e.target.value as 'manual' | 'purchase')
+                  setPurchaseAllocationId('')
+                }}
+              />
+              <label htmlFor="manual" className="cursor-pointer text-sm">
+                Manual Adjustment
+              </label>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="radio"
+                id="purchase"
+                value="purchase"
+                checked={adjustmentSource === 'purchase'}
+                onChange={(e) => setAdjustmentSource(e.target.value as 'manual' | 'purchase')}
+              />
+              <label htmlFor="purchase" className="cursor-pointer text-sm">
+                From Purchase
+              </label>
+            </div>
+          </div>
+
+          {adjustmentSource === 'purchase' && (
+            <div className="space-y-2 mt-2">
+              <Label className="text-xs">Select Purchase</Label>
+              <Select value={purchaseAllocationId} onValueChange={setPurchaseAllocationId}>
+                <SelectTrigger className="text-xs">
+                  <SelectValue placeholder="Select purchase to adjust from..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {purchaseAllocations?.map((alloc: any) => (
+                    <SelectItem key={alloc.id} value={alloc.id}>
+                      {alloc.purchase_line_item?.purchase?.invoice_number} - {alloc.purchase_line_item?.purchase?.supplier?.name} ({alloc.quantity} units)
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="space-y-2">
         <Label>Quantity</Label>
         <Input
@@ -614,7 +712,7 @@ function AdjustmentForm({ onSuccess }: { onSuccess: () => void }) {
       <Button
         className="w-full"
         onClick={() => adjustMutation.mutate()}
-        disabled={!productId || !locationId || !quantity || !reason || adjustMutation.isPending}
+        disabled={!productId || !locationId || !quantity || !reason || adjustMutation.isPending || (adjustmentSource === 'purchase' && !purchaseAllocationId)}
       >
         {adjustMutation.isPending ? 'Processing...' : 'Submit Adjustment'}
       </Button>
