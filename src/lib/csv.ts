@@ -42,7 +42,19 @@ export function parseCSV(csvText: string): Record<string, string>[] {
   const lines = csvText.trim().split('\n')
   if (lines.length < 2) return []
 
-  const headers = parseCSVLine(lines[0]!).map((h) => h.trim().toLowerCase().replace(/\s+/g, '_'))
+  const headers = parseCSVLine(lines[0]!).map((h) => {
+    // Remove asterisks, parentheses and their content, then convert to snake_case
+    let clean = h.trim()
+    // Remove asterisks
+    clean = clean.replace(/\*/g, '')
+    // Remove parenthetical content
+    clean = clean.replace(/\([^)]*\)/g, '')
+    // Convert to lowercase and replace spaces/multiple spaces with single underscore
+    clean = clean.toLowerCase().replace(/\s+/g, '_')
+    // Remove leading/trailing underscores
+    clean = clean.replace(/^_+|_+$/g, '')
+    return clean
+  })
   const rows: Record<string, string>[] = []
 
   for (let i = 1; i < lines.length; i++) {
