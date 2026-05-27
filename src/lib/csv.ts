@@ -49,6 +49,8 @@ export function parseCSV(csvText: string): Record<string, string>[] {
     clean = clean.replace(/\*/g, '')
     // Remove parenthetical content
     clean = clean.replace(/\([^)]*\)/g, '')
+    // Split by forward slash and take the first part (e.g., "Product ID / SKU / Code" → "Product ID")
+    clean = clean.split('/')[0]!.trim()
     // Convert to lowercase and replace spaces/multiple spaces with single underscore
     clean = clean.toLowerCase().replace(/\s+/g, '_')
     // Remove leading/trailing underscores
